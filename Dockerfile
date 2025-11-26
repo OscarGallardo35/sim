@@ -1,61 +1,68 @@
-# ============================================
-# Dockerfile definitivo para SimStudio (2025)
-# ============================================
-
 FROM oven/bun:1.1-alpine AS base
 WORKDIR /app
 
-# ------------------------------------------------------------------
-# 1. Dependencias del sistema (solo lo necesario)
-# ------------------------------------------------------------------
 RUN apk add --no-cache git curl ca-certificates
 
 # ------------------------------------------------------------------
-# 2. Instalación de dependencias (con lockfile)
+# Stage 2: Dependencies
 # ------------------------------------------------------------------
 FROM base AS deps
+WORKDIR /app
+
 COPY package.json bun.lockb* ./
 COPY packages/db/package.json ./packages/db/
 COPY apps/sim/package.json ./apps/sim/
-RUN bun install --frozen-lockfile
+
+# Instalar sin frozen-lockfile para permitir resolución de deps
+RUN bun install || bun install --no-save
+
+# Instalar lodash explícitamente si no está
+RUN bun add lodash || true
 
 # ------------------------------------------------------------------
-# 3. Build de la app
+# Stage 3: Builder  
 # ------------------------------------------------------------------
 FROM base AS builder
+WORKDIR /app
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Variables de entorno de build
 ARG NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 ENV NODE_ENV=production
-ENV NEXT_TELEMETERY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV SKIP_ENV_VALIDATION=true
 
 # Generar schema + build
 RUN cd packages/db && bunx drizzle-kit generate || true
 RUN bun run build --filter=sim
 
 # ------------------------------------------------------------------
-# 4. Imagen final ultra-ligera (solo runtime)
+# Stage 4: Runner
 # ------------------------------------------------------------------
 FROM oven/bun:1.1-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
 
-# Usuario no-root
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-# Copiar solo lo necesario del standalone build
-COPY --from=builder --chown=nextjs:nodejs /app/apps/sim/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/sim/.next/static ./apps/sim/.next/static
+# Copiar archivos built
+COPY --from=builder --chown=nextjs:nodejs /app/apps/sim/.next ./apps/sim/.next
 COPY --from=builder --chown=nextjs:nodejs /app/apps/sim/public ./apps/sim/public
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/apps ./apps
+COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 
 USER nextjs
 EXPOSE 3000
 
-CMD ["bun", "server.js"]
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+WORKDIR /app/apps/sim
+CMD ["bun", "run", "start"]

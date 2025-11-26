@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "NEXT_BUILD_MODE=standalone next build"
+    "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:sockets": "cd apps/sim && bun run dev:sockets",
     "dev:full": "cd apps/sim && bun run dev:full",

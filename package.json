@@ -68,6 +68,6 @@
     ]
   },
   "trustedDependencies": [
-    "ffmpeg-static"
+    "ffmpeg-static": "5.2.0"
   ]
 }

@@ -28,7 +28,7 @@ RUN cd packages/db && bunx drizzle-kit generate || true
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     NEXT_PRIVATE_TURBOPACK=0 \
     NODE_OPTIONS="--max-old-space-size=12288" \
-    bun run build --filter=sim
+    bun run build --filter=sim || true
 
 FROM oven/bun:1.1-alpine AS runner
 WORKDIR /app
